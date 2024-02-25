@@ -341,7 +341,7 @@ impl State {
             }
             KeyCode::Char(c @ '1'..='9') if modfr => {
                 return c.to_digit(10).map_or(InputAction::Continue, |c| {
-                    InputAction::Accept(self.results_state.selected() + c - 1 as usize)
+                    InputAction::Accept(self.results_state.selected() + c as usize - 1usize)
                 })
             }
             KeyCode::Left if ctrl => self
