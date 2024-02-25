@@ -142,11 +142,11 @@ impl DrawState<'_> {
     fn index(&mut self) {
         // these encode the slices of `" > "`, `" {n} "`, or `"   "` in a compact form.
         // Yes, this is a hack, but it makes me feel happy
-        static SLICES: &str = " > 1 2 3 4 5 6 7 8 9   ";
+        static SLICES: &str = " > 2 3 4 5 6 7 8 9   ";
 
         let i = self.y as usize + self.state.offset;
         let i = i.checked_sub(self.state.selected);
-        let i = i.unwrap_or(10).min(10) * 2;
+        let i = i.unwrap_or(9).min(9) * 2;
         self.draw(&SLICES[i..i + 3], Style::default());
     }
 
