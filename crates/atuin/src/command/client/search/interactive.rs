@@ -209,15 +209,6 @@ impl State {
             self.search.input.position() == UnicodeWidthStr::width(self.search.input.as_str());
         let cursor_at_start_of_line = self.search.input.position() == 0;
 
-        // support ctrl-a prefix, like screen or tmux
-        if !self.prefix
-            && ctrl
-            && input.code == KeyCode::Char(settings.keys.prefix.chars().next().unwrap_or('a'))
-        {
-            self.prefix = true;
-            return InputAction::Continue;
-        }
-
         // core input handling, common for all tabs
         let common: Option<InputAction> = match input.code {
             KeyCode::Char('c' | 'g') if ctrl => Some(InputAction::ReturnOriginal),
@@ -301,86 +292,6 @@ impl State {
         // reset the state, will be set to true later if user really did change it
         self.switched_search_mode = false;
 
-        // first up handle prefix mappings. these take precedence over all others
-        // eg, if a user types ctrl-a d, delete the history
-        if self.prefix {
-            // It'll be expanded.
-            #[allow(clippy::single_match)]
-            match input.code {
-                KeyCode::Char('d') => {
-                    return InputAction::Delete(self.results_state.selected());
-                }
-                KeyCode::Char('a') => {
-                    self.search.input.start();
-                    //  This prevents pressing ctrl-a twice while still in prefix mode
-                    self.prefix = false;
-                    return InputAction::Continue;
-                }
-                _ => {}
-            }
-        }
-
-        // handle keymap specific keybindings.
-        match self.keymap_mode {
-            KeymapMode::VimNormal => match input.code {
-                KeyCode::Char('?' | '/') if !ctrl => {
-                    self.search.input.clear();
-                    self.set_keymap_cursor(settings, "vim_insert");
-                    self.keymap_mode = KeymapMode::VimInsert;
-                    return InputAction::Continue;
-                }
-                KeyCode::Char('j') if !ctrl => {
-                    return self.handle_search_down(settings, true);
-                }
-                KeyCode::Char('k') if !ctrl => {
-                    return self.handle_search_up(settings, true);
-                }
-                KeyCode::Char('h') if !ctrl => {
-                    self.search.input.left();
-                    return InputAction::Continue;
-                }
-                KeyCode::Char('l') if !ctrl => {
-                    self.search.input.right();
-                    return InputAction::Continue;
-                }
-                KeyCode::Char('a') if !ctrl => {
-                    self.search.input.right();
-                    self.set_keymap_cursor(settings, "vim_insert");
-                    self.keymap_mode = KeymapMode::VimInsert;
-                    return InputAction::Continue;
-                }
-                KeyCode::Char('A') if !ctrl => {
-                    self.search.input.end();
-                    self.set_keymap_cursor(settings, "vim_insert");
-                    self.keymap_mode = KeymapMode::VimInsert;
-                    return InputAction::Continue;
-                }
-                KeyCode::Char('i') if !ctrl => {
-                    self.set_keymap_cursor(settings, "vim_insert");
-                    self.keymap_mode = KeymapMode::VimInsert;
-                    return InputAction::Continue;
-                }
-                KeyCode::Char('I') if !ctrl => {
-                    self.search.input.start();
-                    self.set_keymap_cursor(settings, "vim_insert");
-                    self.keymap_mode = KeymapMode::VimInsert;
-                    return InputAction::Continue;
-                }
-                KeyCode::Char(_) if !ctrl => {
-                    return InputAction::Continue;
-                }
-                _ => {}
-            },
-            KeymapMode::VimInsert => {
-                if input.code == KeyCode::Esc || (ctrl && input.code == KeyCode::Char('[')) {
-                    self.set_keymap_cursor(settings, "vim_normal");
-                    self.keymap_mode = KeymapMode::VimNormal;
-                    return InputAction::Continue;
-                }
-            }
-            _ => {}
-        }
-
         match input.code {
             KeyCode::Enter => return self.handle_search_accept(settings),
             KeyCode::Char('m') if ctrl => return self.handle_search_accept(settings),
@@ -392,7 +303,7 @@ impl State {
                     InputAction::Accept(self.results_state.selected() + c as usize - 1usize)
                 })
             }
-            KeyCode::Left if ctrl => self
+            KeyCode::Left if ctrl || alt => self
                 .search
                 .input
                 .prev_word(&settings.word_chars, settings.word_jump_mode),
@@ -406,7 +317,7 @@ impl State {
             KeyCode::Char('b') if ctrl => {
                 self.search.input.left();
             }
-            KeyCode::Right if ctrl => self
+            KeyCode::Right if ctrl || alt => self
                 .search
                 .input
                 .next_word(&settings.word_chars, settings.word_jump_mode),
@@ -420,7 +331,7 @@ impl State {
             KeyCode::Char('a') if ctrl => self.search.input.start(),
             KeyCode::Char('e') if ctrl => self.search.input.end(),
             KeyCode::End => self.search.input.end(),
-            KeyCode::Backspace if ctrl => self
+            KeyCode::Backspace if ctrl || alt => self
                 .search
                 .input
                 .remove_prev_word(&settings.word_chars, settings.word_jump_mode),
@@ -442,13 +353,17 @@ impl State {
                 // suppress quirks as much as possible.
                 self.search.input.back();
             }
-            KeyCode::Delete if ctrl => self
+            KeyCode::Delete if ctrl || alt => self
                 .search
                 .input
                 .remove_next_word(&settings.word_chars, settings.word_jump_mode),
             KeyCode::Delete => {
                 self.search.input.remove();
             }
+            KeyCode::Char('d') if alt => self
+                .search
+                .input
+                .remove_next_word(&settings.word_chars, settings.word_jump_mode),
             KeyCode::Char('d') if ctrl => {
                 if self.search.input.as_str().is_empty() {
                     return InputAction::ReturnOriginal;
@@ -467,6 +382,8 @@ impl State {
                 }
             }
             KeyCode::Char('u') if ctrl => self.search.input.clear(),
+            KeyCode::Char('K') if ctrl => self.search.input.clear(),
+            KeyCode::Char('k') if ctrl => while self.search.input.remove().is_some() {},
             KeyCode::Char('r') if ctrl => self.search.rotate_filter_mode(settings, 1),
             KeyCode::Char('s') if ctrl => {
                 self.switched_search_mode = true;
