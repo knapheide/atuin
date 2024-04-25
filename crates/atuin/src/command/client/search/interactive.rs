@@ -212,7 +212,7 @@ impl State {
         // support ctrl-a prefix, like screen or tmux
         if !self.prefix
             && ctrl
-            && input.code == KeyCode::Char(settings.keys.prefix.chars().next().unwrap_or('a'))
+            && input.code == KeyCode::Char(settings.keys.prefix.chars().next().unwrap_or('j'))
         {
             self.prefix = true;
             return InputAction::Continue;
@@ -392,7 +392,7 @@ impl State {
                     InputAction::Accept(self.results_state.selected() + c as usize - 1usize)
                 })
             }
-            KeyCode::Left if ctrl => self
+            KeyCode::Left if ctrl || alt => self
                 .search
                 .input
                 .prev_word(&settings.word_chars, settings.word_jump_mode),
@@ -406,7 +406,7 @@ impl State {
             KeyCode::Char('b') if ctrl => {
                 self.search.input.left();
             }
-            KeyCode::Right if ctrl => self
+            KeyCode::Right if ctrl || alt => self
                 .search
                 .input
                 .next_word(&settings.word_chars, settings.word_jump_mode),
@@ -420,7 +420,7 @@ impl State {
             KeyCode::Char('a') if ctrl => self.search.input.start(),
             KeyCode::Char('e') if ctrl => self.search.input.end(),
             KeyCode::End => self.search.input.end(),
-            KeyCode::Backspace if ctrl => self
+            KeyCode::Backspace if ctrl || alt => self
                 .search
                 .input
                 .remove_prev_word(&settings.word_chars, settings.word_jump_mode),
@@ -442,13 +442,17 @@ impl State {
                 // suppress quirks as much as possible.
                 self.search.input.back();
             }
-            KeyCode::Delete if ctrl => self
+            KeyCode::Delete if ctrl || alt => self
                 .search
                 .input
                 .remove_next_word(&settings.word_chars, settings.word_jump_mode),
             KeyCode::Delete => {
                 self.search.input.remove();
             }
+            KeyCode::Char('d') if alt => self
+                .search
+                .input
+                .remove_next_word(&settings.word_chars, settings.word_jump_mode),
             KeyCode::Char('d') if ctrl => {
                 if self.search.input.as_str().is_empty() {
                     return InputAction::ReturnOriginal;
@@ -467,6 +471,8 @@ impl State {
                 }
             }
             KeyCode::Char('u') if ctrl => self.search.input.clear(),
+            KeyCode::Char('K') if ctrl => self.search.input.clear(),
+            KeyCode::Char('k') if ctrl => while self.search.input.remove().is_some() {},
             KeyCode::Char('r') if ctrl => self.search.rotate_filter_mode(settings, 1),
             KeyCode::Char('s') if ctrl => {
                 self.switched_search_mode = true;
